@@ -1,6 +1,5 @@
-from threading import Thread
 import requests
-import json
+import numpy
 
 
 class CommunicationAPI:
@@ -18,16 +17,6 @@ class CommunicationAPI:
     def join_game(self, playerId, gameId):
         return self.make_get_request('/game/play?playerId=' + str(playerId) + '&gameId=' + str(gameId))
 
-    def return_map(self, playerId, gameId):
-        mapJson = self.join_game(playerId, gameId)
-        return mapJson
-
-    def return_matrix(self, playerId, gameId):
-        map = self.return_map(playerId, gameId)
-        matrix = map
-        return matrix
-
-
     def do_action(self, playerId, gameId, action):
         URL = '/doAction?playerId=' + str(playerId) + "&gameId=" + str(gameId) + '&action=' + action
         print(URL)
@@ -35,25 +24,14 @@ class CommunicationAPI:
         return response
 
     def calculate(self, map, playerId, gameId):
-        #logika
-        #u zavisnosti od logike biramo action
         player1 = map.get('result').get('player1')
         player2 = map.get('result').get('player2')
 
+        action = ''
+
         playerIndex = map.get('playerIndex')
 
-        if(playerIndex == 1):
-            # enemy coordinates
-            enemy_x = player2.get('x')
-            enemy_y = player2.get('y')
-
-            # my coordinates
-            x = player1.get('x')
-            y = player1.get('y')
-
-            action = self.temp(x, y, enemy_x, enemy_y)
-
-        elif(playerIndex == 2):
+        if playerIndex == 2:
             # enemy coordinates
             enemy_x = player1.get('x')
             enemy_y = player1.get('y')
@@ -62,49 +40,107 @@ class CommunicationAPI:
             x = player2.get('x')
             y = player2.get('y')
 
-            action = self.temp(x, y, enemy_x, enemy_y)
+            # last action
+            lastAction = map.get('result').get('player1').get('lastAction')
 
-        if(action != ''):
+            if lastAction != None:
+                action = self.move(x, y, enemy_x, enemy_y)
+            else:
+                action = 'mw'
+
+        elif playerIndex == 1:
+            # enemy coordinates
+            enemy_x = player2.get('x')
+            enemy_y = player2.get('y')
+
+            # my coordinates
+            x = player1.get('x')
+            y = player1.get('y')
+
+            # last action
+            lastAction = map.get('result').get('player2').get('lastAction')
+
+            if lastAction != None:
+                action = self.move(x, y, enemy_x, enemy_y)
+            else:
+                action = 'mw'
+
+        if action != '':
             response = self.do_action(playerId, gameId, action)
-            self.run(response, playerId, gameId)
+            print(response)
+            if playerIndex == 1:
+                self.calculate(response, playerIndex, gameId)
+            if playerIndex == 2:
+                self.calculate(response, playerIndex, gameId)
 
-    def run(self, map, playerId, gameId):
-        res = self.calculate(map, playerId, gameId)
-        #self.run()
-
-    def temp(self, x, y, enemy_x, enemy_y):
+    def move(self, x, y, enemy_x, enemy_y):
         action = ''
-        if(x < enemy_x):
+        if x < enemy_x:
             action = 'd'
-        elif(x > enemy_x):
+        elif x > enemy_x:
             action = 'a'
-        if(y < enemy_y):
+        if y < enemy_y:
             action = 's'
-        elif(y > enemy_y):
+        elif y > enemy_y:
             action = 'w'
 
         return action
 
+    def matrix(self, map):
+        # 0, water, fire, grass
+        # 0, 1 fire, 2 grass, 3 water, 4 obstacle
+        matrixJson = map.get('result').get('map').get('tiles')
+        matrix = [[0 for x in range(20)] for y in range(20)]
+        for i in range(20):
+            for j in range(20):
+                type = matrixJson[i][j].get('type')
+                item = matrixJson[i][j].get('item')
+
+                # type
+                if type == 'WATER':
+                    matrix[i][j] = 'w'
+                if type == 'FIRE':
+                    matrix[i][j] = 'f'
+                if type == 'GRASS':
+                    matrix[i][j] = 'g'
+                if type == 'OBSTACLE':
+                    matrix[i][j] = 'o'
+                if type == 'NORMAL':
+                    matrix[i][j] = 'n'
+
+                # items
+                if item == 'WATER':
+                    matrix[i][j] = str(matrix[i][j]) + 'w'
+                if item == 'FIRE':
+                    matrix[i][j] = str(matrix[i][j]) + 'f'
+                if item == 'GRASS':
+                    matrix[i][j] = str(matrix[i][j]) + 'g'
+                if (item == None):
+                    matrix[i][j] = str(matrix[i][j]) + 'n'
+
+        print(matrix)
+
+    def distance(self, x, y, matrix):
+
+        for i in range(20):
+            for j in range(20):
+                matrix[i][j]
+
 
 
 c = CommunicationAPI()
-
-
-#join game
-#print(c.return_matrix(20, 20))
 
 print("Enter player ID:")
 playerId = input()
 print("Enter game id:")
 gameId = input()
 
-#join game
-map = (c.return_matrix(playerId, gameId))
-print(map)
+# join game
+levelMap = (c.join_game(playerId, gameId))
+print(levelMap)
 
-#run game
-#c.run(map, playerId, gameId)
+# fill matrix
+c.matrix(levelMap)
 
-#run with two threads
-Thread(target = c.run(map, playerId, gameId)).start()
-Thread(target = c.run(map, 2, gameId)).start()
+# run game
+# c.calculate(levelMap, playerId, gameId)
